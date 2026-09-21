@@ -205,9 +205,13 @@ class GroqClient:
                 "response_format": "json",
                 "temperature": 0,
             }
-            if settings.language:
-                # Documented to improve both accuracy and latency.
-                kwargs["language"] = settings.language
+            # Transcription, never translation: this endpoint returns the spoken
+            # language as-is. Omitting `language` lets the model auto-detect, so
+            # Arabic audio comes back as Arabic script; an explicit code like
+            # "ar" or "en" just biases detection toward that language.
+            lang = (settings.language or "").strip().lower()
+            if lang and lang not in ("auto", "auto-detect", "autodetect", "none", "null"):
+                kwargs["language"] = lang
             return _response_text(self._client.audio.transcriptions.create(**kwargs))
 
         return call_with_fallback(

@@ -108,6 +108,14 @@ def _float(name: str, default: float, minimum: float = 0.0) -> float:
         return default
 
 
+def _normalize_language(raw: str) -> str:
+    """Blank (auto-detect) by default so Arabic is transcribed, not forced to English."""
+    lang = (raw or "").strip().lower()
+    if lang in ("", "auto", "auto-detect", "autodetect", "none", "null"):
+        return ""
+    return lang
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str
@@ -138,7 +146,7 @@ class Settings:
             base_url=_text("GROQ_BASE_URL", DEFAULT_BASE_URL) or DEFAULT_BASE_URL,
             stt_model=_text("PITH_STT_MODEL", DEFAULT_STT_MODEL),
             stt_fallback=_text("PITH_STT_FALLBACK", DEFAULT_STT_FALLBACK),
-            language=_text("PITH_LANGUAGE", "en"),
+            language=_normalize_language(_text("PITH_LANGUAGE", "")),
             fix_enabled=_flag("PITH_FIX", True),
             fix_model=_text("PITH_FIX_MODEL", DEFAULT_FIX_MODEL),
             fix_fallback=_text("PITH_FIX_FALLBACK", DEFAULT_FIX_FALLBACK),

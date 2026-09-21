@@ -250,7 +250,7 @@ value below is the default.
 | `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible endpoint |
 | `PITH_STT_MODEL` | `whisper-large-v3` | Primary transcription model |
 | `PITH_STT_FALLBACK` | `whisper-large-v3-turbo` | Used on rate limits, outages, and timeouts |
-| `PITH_LANGUAGE` | `en` | Spoken language; blank for auto-detect |
+| `PITH_LANGUAGE` | blank (auto-detect) | Spoken language; `ar` forces Arabic, `en` forces English |
 | `PITH_FIX` | `1` | Enable the transcript cleanup pass |
 | `PITH_FIX_MODEL` | `qwen/qwen3.8-27b` | Primary cleanup model |
 | `PITH_FIX_FALLBACK` | `qwen/qwen3.6-27b` | Cleanup fallback |

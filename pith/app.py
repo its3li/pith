@@ -23,6 +23,7 @@ from .config import (
 )
 from .groq_client import GroqClient, describe_error
 from .paste import apply_leading_space, get_foreground_window, paste_text
+from .single_instance import SingleInstance
 from .status import History, StatusBus, log
 
 # Ignore a stop that lands within this window of a start: it is a double-tap, and
@@ -238,11 +239,20 @@ class DictationApp:
     # -- hotkeys -------------------------------------------------------------
 
     def _bind_global_hotkeys(self) -> None:
-        # suppress=True keeps the combination from also reaching the focused app,
-        # which previously let the toggle trigger shortcuts underneath it.
+        # Deliberately NOT suppressed. The `keyboard` library implements
+        # suppression by holding Ctrl/Shift in a pending/suppressed state and
+        # fake-replaying them (transition_table in keyboard/__init__.py). For a
+        # chord built on two modifiers, the real modifier key-up is swallowed
+        # after the hotkey fires ('suppressed', KEY_UP, 'modifier') -> blocked,
+        # so the focused game/browser never sees the release and Shift/Ctrl
+        # reads as stuck. With suppress=False the hook observes without
+        # touching modifier delivery, and our own injected Ctrl+V paste is
+        # already ignored by the library (is_replaying pass-through), so there
+        # is no recursion either way. Ctrl+Shift+Space / Ctrl+Shift+P have no
+        # destructive default action underneath, so letting them through is safe.
         self._global_hotkeys = [
-            self._bind(TOGGLE_HOTKEY, self.toggle),
-            self._bind(UI_HOTKEY, self.bus.toggle),
+            self._bind(TOGGLE_HOTKEY, self.toggle, suppress=False),
+            self._bind(UI_HOTKEY, self.bus.toggle, suppress=False),
         ]
 
     def _bind_session_hotkeys(self) -> None:
@@ -253,9 +263,9 @@ class DictationApp:
         reached the focused app -- which is how a half-typed Discord message got
         sent by the keypress that was meant to stop the recording.
         """
-        bindings = [self._bind(CANCEL_HOTKEY, self.cancel)]
+        bindings = [self._bind(CANCEL_HOTKEY, self.cancel, suppress=True)]
         if self.settings.stop_on_enter:
-            bindings.append(self._bind(STOP_HOTKEY, self.stop))
+            bindings.append(self._bind(STOP_HOTKEY, self.stop, suppress=True))
         self._session_hotkeys = [handle for handle in bindings if handle is not None]
 
     def _unbind_session_hotkeys(self) -> None:
@@ -263,9 +273,9 @@ class DictationApp:
             self._unbind(handle)
         self._session_hotkeys = []
 
-    def _bind(self, combo: str, action):
+    def _bind(self, combo: str, action, suppress: bool = True):
         try:
-            return keyboard.add_hotkey(combo, self._queued(action), suppress=True)
+            return keyboard.add_hotkey(combo, self._queued(action), suppress=suppress)
         except Exception as exc:
             log(f"Could not register {combo}: {exc}")
             return None
@@ -293,6 +303,10 @@ class DictationApp:
         for handle in self._global_hotkeys:
             self._unbind(handle)
         self._global_hotkeys = []
+        try:
+            keyboard.unhook_all_hotkeys()
+        except Exception:
+            pass
         self._actions.put(None)
         try:
             self.recorder.close()
@@ -336,12 +350,21 @@ def main() -> int:
         log("Pith needs Windows: it uses winsound, user32, and the system tray.")
         return 1
 
+    guard = SingleInstance()
+    if not guard.acquire():
+        log("Pith is already running; this second copy is exiting without binding hotkeys.")
+        return 0
+
     load_env()
     settings = Settings.from_env()
     try:
         settings.require_api_key()
     except RuntimeError as exc:
         log(f"Error: {exc}")
+        guard.release()
         return 1
 
-    return DictationApp(settings).run()
+    try:
+        return DictationApp(settings).run()
+    finally:
+        guard.release()
